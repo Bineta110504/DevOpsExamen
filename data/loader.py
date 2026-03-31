@@ -1,6 +1,5 @@
-# data/loader.py
 import seaborn as sns
-import pandas as pd
+
 
 def load_data():
     df = sns.load_dataset("titanic")
