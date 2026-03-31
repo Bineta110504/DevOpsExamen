@@ -896,123 +896,582 @@
     
 #     st.markdown('</div>', unsafe_allow_html=True)
 
+# import streamlit as st
+# from data.loader import load_data
+# import plotly.express as px
+# import plotly.graph_objects as go
+# import pandas as pd
+# from datetime import datetime
+
+# # CONFIG
+# st.set_page_config(
+#     page_title="Titanic Analytics Dashboard",
+#     layout="wide",
+#     initial_sidebar_state="expanded"
+# )
+
+# # LOAD DATA
+# df = load_data()
+
+# # ✅ CORRECTION IMPORTANTE
+# df_filtered = df.copy()
+
+# # SESSION LOGIN
+# if "logged_in" not in st.session_state:
+#     st.session_state.logged_in = False
+
+# # LOGIN
+# if not st.session_state.logged_in:
+#     username = st.text_input("Username")
+#     password = st.text_input("Password", type="password")
+
+#     if st.button("Login"):
+#         if username == "admin" and password == "1234":
+#             st.session_state.logged_in = True
+#             st.rerun()
+#         else:
+#             st.error("Wrong credentials")
+
+# # DASHBOARD
+# else:
+
+#     # SIDEBAR
+#     with st.sidebar:
+#         st.title("Filtres")
+
+#         classe = st.multiselect(
+#             "Classe",
+#             options=sorted(df['pclass'].unique()),
+#             default=sorted(df['pclass'].unique())
+#         )
+
+#         sexe = st.multiselect(
+#             "Sexe",
+#             options=df['sex'].unique(),
+#             default=df['sex'].unique()
+#         )
+
+#         age_range = st.slider(
+#             "Age",
+#             int(df['age'].min()),
+#             int(df['age'].max()),
+#             (int(df['age'].min()), int(df['age'].max()))
+#         )
+
+#         fare_range = st.slider(
+#             "Fare",
+#             float(df['fare'].min()),
+#             float(df['fare'].max()),
+#             (float(df['fare'].min()), float(df['fare'].max()))
+#         )
+
+#     # ✅ FILTRAGE CORRECT (APRÈS sidebar)
+#     df_filtered = df[
+#         (df['pclass'].isin(classe)) &
+#         (df['sex'].isin(sexe)) &
+#         (df['age'] >= age_range[0]) &
+#         (df['age'] <= age_range[1]) &
+#         (df['fare'] >= fare_range[0]) &
+#         (df['fare'] <= fare_range[1])
+#     ]
+
+#     # HEADER
+#     st.title("🚢 Titanic Dashboard")
+
+#     col1, col2, col3 = st.columns(3)
+
+#     col1.metric("Total Passagers", len(df_filtered))
+#     col2.metric("Taux survie", f"{df_filtered['survived'].mean()*100:.1f}%")
+#     col3.metric("Age moyen", f"{df_filtered['age'].mean():.1f}")
+
+#     # GRAPH 1
+#     fig1 = px.histogram(df_filtered, x="age", nbins=30)
+#     st.plotly_chart(fig1, use_container_width=True)
+
+#     # GRAPH 2
+#     fig2 = px.pie(
+#         df_filtered,
+#         names="survived",
+#         title="Survie"
+#     )
+#     st.plotly_chart(fig2, use_container_width=True)
+
+#     # GRAPH 3
+#     fig3 = px.bar(
+#         df_filtered.groupby("sex")["survived"].mean().reset_index(),
+#         x="sex",
+#         y="survived"
+#     )
+#     st.plotly_chart(fig3, use_container_width=True)
+
+#     # EXPORT
+#     csv = df_filtered.to_csv(index=False)
+
+#     st.download_button(
+#         label="📥 Télécharger CSV",
+#         data=csv,
+#         file_name="titanic_filtered.csv",
+#         mime="text/csv"
+#     )
+
+#     # TABLE
+#     st.dataframe(df_filtered, use_container_width=True)
+
 import streamlit as st
-from data.loader import load_data
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import pandas as pd
+from data.loader import load_titanic_data, get_data_info, get_survival_stats
+import logging
+import json
 from datetime import datetime
+import os
+import uuid
 
-# CONFIG
+# ============================================
+# Configuration du logging
+# ============================================
+if not os.path.exists('logs'):
+    os.makedirs('logs')
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(message)s',
+    handlers=[
+        logging.FileHandler('logs/app.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
+def log_interaction(page, filters=None, error=None):
+    """
+    Log les interactions utilisateur au format JSON
+    """
+    log_entry = {
+        'timestamp': datetime.now().isoformat(),
+        'page': page,
+        'filters': filters or {},
+        'session_id': st.session_state.get('session_id', 'unknown'),
+        'error': error
+    }
+    logging.info(json.dumps(log_entry, ensure_ascii=False))
+
+# ============================================
+# Configuration de la page
+# ============================================
 st.set_page_config(
-    page_title="Titanic Analytics Dashboard",
+    page_title="Titanic Dashboard",
+    page_icon="🚢",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# LOAD DATA
+# Initialisation de la session
+if 'session_id' not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())[:8]
+
+# ============================================
+# Chargement des données avec cache
+# ============================================
+@st.cache_data(ttl=3600)
+def load_data():
+    """Charge les données avec cache"""
+    try:
+        df = load_titanic_data()
+        return df
+    except Exception as e:
+        st.error(f"❌ Erreur lors du chargement des données: {e}")
+        log_interaction("ERROR", error=str(e))
+        return None
+
 df = load_data()
 
-# ✅ CORRECTION IMPORTANTE
-df_filtered = df.copy()
+if df is None:
+    st.stop()
 
-# SESSION LOGIN
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
+# ============================================
+# Sidebar - Filtres
+# ============================================
+st.sidebar.title("🔍 Filtres")
+st.sidebar.markdown("---")
 
-# LOGIN
-if not st.session_state.logged_in:
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+# Filtres interactifs
+selected_class = st.sidebar.multiselect(
+    "Classe",
+    options=sorted(df['class'].dropna().unique()),
+    default=sorted(df['class'].dropna().unique())
+)
 
-    if st.button("Login"):
-        if username == "admin" and password == "1234":
-            st.session_state.logged_in = True
-            st.rerun()
-        else:
-            st.error("Wrong credentials")
+selected_sex = st.sidebar.multiselect(
+    "Sexe",
+    options=['male', 'female'],
+    default=['male', 'female']
+)
 
-# DASHBOARD
-else:
+selected_age_group = st.sidebar.multiselect(
+    "Tranche d'âge",
+    options=df['age_group'].dropna().unique(),
+    default=df['age_group'].dropna().unique()
+)
 
-    # SIDEBAR
-    with st.sidebar:
-        st.title("Filtres")
+# Application des filtres
+filtered_df = df[
+    (df['class'].isin(selected_class)) &
+    (df['sex'].isin(selected_sex)) &
+    (df['age_group'].isin(selected_age_group))
+]
 
-        classe = st.multiselect(
-            "Classe",
-            options=sorted(df['pclass'].unique()),
-            default=sorted(df['pclass'].unique())
+filters_applied = {
+    'class': selected_class,
+    'sex': selected_sex,
+    'age_group': selected_age_group
+}
+
+# ============================================
+# Navigation
+# ============================================
+st.sidebar.markdown("---")
+st.sidebar.title("📊 Navigation")
+page = st.sidebar.radio(
+    "Choisissez une page",
+    ["🏠 Vue Générale", "📈 Analyse de Survie", "🎛️ Analyse Interactive", "📋 Données Brutes"]
+)
+
+# Log de la navigation
+log_interaction(page, filters_applied)
+
+# Titre principal
+st.title("🚢 Titanic Dashboard")
+st.markdown("*Analyse interactive du célèbre dataset Titanic*")
+st.markdown("---")
+
+# ============================================
+# PAGE 1 - VUE GÉNÉRALE
+# ============================================
+if page == "🏠 Vue Générale":
+    st.header("📊 Vue Générale des Données")
+    
+    # KPI Cards
+    info = get_data_info(filtered_df)
+    stats = get_survival_stats(filtered_df)
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            label="👥 Passagers",
+            value=f"{info['total_passagers']:,}",
+            delta=f"{info['total_passagers'] - len(df)} vs total"
         )
-
-        sexe = st.multiselect(
-            "Sexe",
-            options=df['sex'].unique(),
-            default=df['sex'].unique()
+    
+    with col2:
+        st.metric(
+            label="💀 Taux de Survie",
+            value=f"{info['survie_rate']:.1f}%",
+            delta=f"{info['survie_rate'] - stats['global_rate']:.1f}%"
         )
-
-        age_range = st.slider(
-            "Age",
-            int(df['age'].min()),
-            int(df['age'].max()),
-            (int(df['age'].min()), int(df['age'].max()))
+    
+    with col3:
+        st.metric(
+            label="📅 Âge Moyen",
+            value=f"{info['age_moyen']:.1f} ans"
         )
-
-        fare_range = st.slider(
-            "Fare",
-            float(df['fare'].min()),
-            float(df['fare'].max()),
-            (float(df['fare'].min()), float(df['fare'].max()))
+    
+    with col4:
+        st.metric(
+            label="👶 Enfants (< 18 ans)",
+            value=f"{info['enfants']}"
         )
+    
+    st.markdown("---")
+    
+    # Graphiques
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Distribution par Classe")
+        fig_class = px.pie(
+            filtered_df,
+            names='class',
+            title='Répartition des passagers par classe',
+            color_discrete_sequence=px.colors.qualitative.Set2,
+            hole=0.3
+        )
+        st.plotly_chart(fig_class, use_container_width=True)
+    
+    with col2:
+        st.subheader("Distribution par Sexe")
+        sex_counts = filtered_df['sex'].value_counts().reset_index()
+        sex_counts.columns = ['sex', 'count']
+        fig_sex = px.bar(
+            sex_counts,
+            x='sex',
+            y='count',
+            title='Nombre de passagers par sexe',
+            color='sex',
+            color_discrete_map={'male': '#3498db', 'female': '#e84393'},
+            text='count'
+        )
+        fig_sex.update_traces(textposition='outside')
+        st.plotly_chart(fig_sex, use_container_width=True)
+    
+    # Distribution des âges
+    st.subheader("Distribution des Âges")
+    fig_age = px.histogram(
+        filtered_df,
+        x='age',
+        nbins=30,
+        title='Distribution des âges des passagers',
+        color_discrete_sequence=['#27ae60'],
+        marginal='box'
+    )
+    st.plotly_chart(fig_age, use_container_width=True)
+    
+    # Prix des billets
+    st.subheader("💰 Prix des billets")
+    fig_fare = px.box(
+        filtered_df,
+        x='class',
+        y='fare',
+        title='Distribution des prix par classe',
+        color='class',
+        points='all'
+    )
+    st.plotly_chart(fig_fare, use_container_width=True)
 
-    # ✅ FILTRAGE CORRECT (APRÈS sidebar)
-    df_filtered = df[
-        (df['pclass'].isin(classe)) &
-        (df['sex'].isin(sexe)) &
-        (df['age'] >= age_range[0]) &
-        (df['age'] <= age_range[1]) &
-        (df['fare'] >= fare_range[0]) &
-        (df['fare'] <= fare_range[1])
-    ]
-
-    # HEADER
-    st.title("🚢 Titanic Dashboard")
-
+# ============================================
+# PAGE 2 - ANALYSE DE SURVIE
+# ============================================
+elif page == "📈 Analyse de Survie":
+    st.header("📈 Analyse des Facteurs de Survie")
+    
+    # Statistiques clés
+    stats = get_survival_stats(filtered_df)
     col1, col2, col3 = st.columns(3)
-
-    col1.metric("Total Passagers", len(df_filtered))
-    col2.metric("Taux survie", f"{df_filtered['survived'].mean()*100:.1f}%")
-    col3.metric("Age moyen", f"{df_filtered['age'].mean():.1f}")
-
-    # GRAPH 1
-    fig1 = px.histogram(df_filtered, x="age", nbins=30)
-    st.plotly_chart(fig1, use_container_width=True)
-
-    # GRAPH 2
-    fig2 = px.pie(
-        df_filtered,
-        names="survived",
-        title="Survie"
+    
+    with col1:
+        st.metric("Taux de survie global", f"{stats['global_rate']}%")
+    with col2:
+        st.metric("Taux de survie femmes", f"{stats['par_sexe'].get('female', 0)}%")
+    with col3:
+        st.metric("Taux de survie 1ère classe", f"{stats['par_classe'].get('First', 0)}%")
+    
+    st.markdown("---")
+    
+    # Survie par sexe
+    st.subheader("💀 Taux de Survie par Sexe")
+    survival_by_sex = filtered_df.groupby('sex')['survived'].mean() * 100
+    fig_sex_survival = px.bar(
+        x=survival_by_sex.index,
+        y=survival_by_sex.values,
+        title='Taux de survie (%) par sexe',
+        labels={'x': 'Sexe', 'y': 'Taux de survie (%)'},
+        color=survival_by_sex.index,
+        color_discrete_map={'male': '#e74c3c', 'female': '#2ecc71'},
+        text=survival_by_sex.values.round(1)
     )
-    st.plotly_chart(fig2, use_container_width=True)
-
-    # GRAPH 3
-    fig3 = px.bar(
-        df_filtered.groupby("sex")["survived"].mean().reset_index(),
-        x="sex",
-        y="survived"
+    fig_sex_survival.update_traces(textposition='outside')
+    st.plotly_chart(fig_sex_survival, use_container_width=True)
+    
+    # Survie par classe et sexe
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Survie par Classe")
+        survival_by_class = filtered_df.groupby('class')['survived'].mean() * 100
+        fig_class_survival = px.bar(
+            x=survival_by_class.index,
+            y=survival_by_class.values,
+            title='Taux de survie par classe',
+            color=survival_by_class.index,
+            text=survival_by_class.values.round(1)
+        )
+        fig_class_survival.update_traces(textposition='outside')
+        st.plotly_chart(fig_class_survival, use_container_width=True)
+    
+    with col2:
+        st.subheader("Survie par Tranche d'Âge")
+        survival_by_age = filtered_df.groupby('age_group')['survived'].mean() * 100
+        fig_age_survival = px.bar(
+            x=survival_by_age.index,
+            y=survival_by_age.values,
+            title='Taux de survie par tranche d\'âge',
+            color=survival_by_age.values,
+            color_continuous_scale='Viridis',
+            text=survival_by_age.values.round(1)
+        )
+        fig_age_survival.update_traces(textposition='outside')
+        st.plotly_chart(fig_age_survival, use_container_width=True)
+    
+    # Heatmap de survie (Classe x Sexe)
+    st.subheader("📊 Heatmap de survie: Classe vs Sexe")
+    pivot_table = filtered_df.pivot_table(
+        values='survived',
+        index='class',
+        columns='sex',
+        aggfunc='mean'
+    ) * 100
+    
+    fig_heatmap = px.imshow(
+        pivot_table,
+        text_auto='.1f',
+        color_continuous_scale='RdYlGn',
+        title='Taux de survie (%) par Classe et Sexe',
+        labels=dict(x="Sexe", y="Classe", color="Survie (%)")
     )
-    st.plotly_chart(fig3, use_container_width=True)
+    st.plotly_chart(fig_heatmap, use_container_width=True)
+    
+    # Matrice de corrélation
+    st.subheader("📊 Matrice de Corrélation")
+    numeric_cols = ['age', 'fare', 'pclass', 'sibsp', 'parch', 'survived']
+    corr_matrix = filtered_df[numeric_cols].corr()
+    
+    fig_corr = go.Figure(data=go.Heatmap(
+        z=corr_matrix,
+        x=corr_matrix.columns,
+        y=corr_matrix.columns,
+        colorscale='RdBu',
+        text=corr_matrix.round(2),
+        texttemplate='%{text}',
+        textfont={"size": 12},
+        zmid=0
+    ))
+    fig_corr.update_layout(title='Corrélations entre variables', height=500)
+    st.plotly_chart(fig_corr, use_container_width=True)
 
-    # EXPORT
-    csv = df_filtered.to_csv(index=False)
+# ============================================
+# PAGE 3 - ANALYSE INTERACTIVE
+# ============================================
+elif page == "🎛️ Analyse Interactive":
+    st.header("🎛️ Analyse Interactive des Données")
+    
+    # Sélection des variables
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        x_axis = st.selectbox(
+            "Axe X",
+            options=['age', 'fare', 'pclass', 'sibsp', 'parch']
+        )
+    
+    with col2:
+        y_axis = st.selectbox(
+            "Axe Y",
+            options=['survived', 'age', 'fare', 'pclass']
+        )
+    
+    with col3:
+        color_by = st.selectbox(
+            "Colorer par",
+            options=['sex', 'class', 'embarked', 'who', 'survived']
+        )
+    
+    # Graphique scatter interactif
+    fig_scatter = px.scatter(
+        filtered_df,
+        x=x_axis,
+        y=y_axis,
+        color=color_by,
+        title=f'Relation entre {x_axis} et {y_axis}',
+        hover_data=['name', 'age', 'fare', 'class'],
+        size='fare' if 'fare' in filtered_df.columns else None,
+        size_max=20
+    )
+    st.plotly_chart(fig_scatter, use_container_width=True)
+    
+    # Graphique additionnel
+    st.subheader("📊 Analyse supplémentaire")
+    chart_type = st.selectbox(
+        "Type de graphique",
+        ["Histogramme", "Box plot", "Violin plot"]
+    )
+    
+    if chart_type == "Histogramme":
+        fig = px.histogram(
+            filtered_df,
+            x=x_axis,
+            color=color_by,
+            title=f'Distribution de {x_axis}',
+            marginal='box'
+        )
+    elif chart_type == "Box plot":
+        fig = px.box(
+            filtered_df,
+            x=color_by,
+            y=x_axis,
+            title=f'Distribution de {x_axis} par {color_by}',
+            points='all'
+        )
+    else:
+        fig = px.violin(
+            filtered_df,
+            x=color_by,
+            y=x_axis,
+            title=f'Distribution de {x_axis} par {color_by}',
+            box=True,
+            points='all'
+        )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Statistiques descriptives
+    with st.expander("📊 Statistiques descriptives détaillées"):
+        st.dataframe(filtered_df.describe(), use_container_width=True)
 
+# ============================================
+# PAGE 4 - DONNÉES BRUTES
+# ============================================
+elif page == "📋 Données Brutes":
+    st.header("📋 Données Brutes des Passagers")
+    
+    # Filtre de recherche
+    search_term = st.text_input("🔍 Rechercher un passager", placeholder="Nom ou prénom...")
+    
+    if search_term:
+        display_df = filtered_df[filtered_df['name'].str.contains(search_term, case=False, na=False)]
+        st.info(f"🔎 {len(display_df)} résultat(s) trouvé(s)")
+    else:
+        display_df = filtered_df
+    
+    # Pagination
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        page_size = st.selectbox("Lignes par page", [10, 25, 50, 100])
+    with col2:
+        total_pages = max(1, (len(display_df) + page_size - 1) // page_size)
+        page_number = st.number_input("Page", min_value=1, max_value=total_pages, value=1)
+    
+    start_idx = (page_number - 1) * page_size
+    end_idx = min(start_idx + page_size, len(display_df))
+    
+    st.write(f"**Affichage des lignes {start_idx + 1} à {end_idx} sur {len(display_df)}**")
+    
+    # Afficher les données
+    st.dataframe(
+        display_df.iloc[start_idx:end_idx],
+        use_container_width=True,
+        height=500
+    )
+    
+    # Export CSV
+    csv = display_df.to_csv(index=False)
     st.download_button(
-        label="📥 Télécharger CSV",
+        label="📥 Télécharger toutes les données (CSV)",
         data=csv,
-        file_name="titanic_filtered.csv",
+        file_name="titanic_data.csv",
         mime="text/csv"
     )
 
-    # TABLE
-    st.dataframe(df_filtered, use_container_width=True)
+# ============================================
+# Footer
+# ============================================
+st.markdown("---")
+st.markdown(
+    """
+    <div style='text-align: center; color: gray;'>
+        🚢 <strong>Titanic Dashboard</strong> | Données historiques du RMS Titanic<br>
+        <small>© 2024 - Projet DevOps Data/IA</small>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
