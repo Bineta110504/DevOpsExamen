@@ -1,64 +1,32 @@
 import streamlit as st
-import pandas as pd
-from data.loader import load_data
-import plotly.express as px
-import logging
-import json
 
-# Configuration du logger pour ELK Stack [cite: 17, 39]
-logging.basicConfig(
-    filename="app.log",
-    level=logging.INFO,
-    format="%(message)s"
+# DOIT être en premier
+st.set_page_config(
+    page_title="Titanic Dashboard",
+    page_icon="🚢",
+    layout="wide"
 )
 
-def log_event(event):
-    logging.info(json.dumps(event))
-
-# Chargement du dataset Titanic via seaborn [cite: 13, 22, 54]
-df = load_data()
-
-st.title("Dashboard Titanic")
-
-# 1. Sidebar filtres [cite: 14, 23]
-st.sidebar.header("Filtres")
-
-classe = st.sidebar.multiselect(
-    "Classe", options=sorted(df["pclass"].unique()), default=df["pclass"].unique()
+# Style
+st.markdown(
+    """
+    <style>
+    .main {
+        background-color: #f5f7fa;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
 )
 
-sexe = st.sidebar.multiselect(
-    "Sexe", options=df["sex"].unique(), default=df["sex"].unique()
+st.title("🚢 Dashboard Titanic")
+st.markdown("### Analyse interactive des passagers")
+
+st.markdown("---")
+
+st.info("Utilisez le menu à gauche pour naviguer entre les pages 📊")
+
+st.image(
+    "https://images.unsplash.com/photo-1544551763-cede2b27b6bc",
+    use_column_width=True
 )
-
-# Application des filtres sur le DataFrame [cite: 14]
-filtered_df = df[
-    (df["pclass"].isin(classe)) &
-    (df["sex"].isin(sexe))
-]
-
-# --- CORRECTION : Appels des logs au bon endroit (après définition des variables) --- [cite: 15, 24]
-log_event({
-    "event": "filter_applied",
-    "classe": classe,
-    "sexe": sexe
-})
-log_event({
-    "event": "page_view",
-    "page": "dashboard"
-})
-
-# 2. KPI - Vue Générale [cite: 14]
-st.subheader("Vue Générale")
-col1, col2 = st.columns(2)
-col1.metric("Nombre de passagers", len(filtered_df))
-col2.metric("Taux de survie", f"{round(filtered_df['survived'].mean() * 100, 2)}%")
-
-# 3. Graphique - Analyse de survie [cite: 14]
-st.subheader("Survie par sexe")
-fig = px.bar(filtered_df, x="sex", y="survived", color="sex", title="Taux de survie par sexe")
-st.plotly_chart(fig)
-
-# 4. Données brutes [cite: 14]
-st.subheader("Données")
-st.dataframe(filtered_df)
