@@ -1,32 +1,19 @@
-# import seaborn as sns
-
-
-# def load_data():
-#     df = sns.load_dataset("titanic")
-
-#     # nettoyage simple
-#     df = df.drop_duplicates()
-
-#     # gérer valeurs nulles
-#     df["age"] = df["age"].fillna(df["age"].median())
-#     df["embarked"] = df["embarked"].fillna("Unknown")
-
-#     return df
-
-
 import seaborn as sns
 import pandas as pd
 
 def load_titanic_data():
+    """
+    Charge le dataset Titanic depuis seaborn et nettoie les données
+    """
+    # Charger les données
     df = sns.load_dataset('titanic')
-    df = df.copy()
     
-    # Nettoyer les données
+    # Nettoyage des valeurs nulles
     df['age'].fillna(df['age'].median(), inplace=True)
     df['embarked'].fillna(df['embarked'].mode()[0], inplace=True)
     df['deck'] = df['deck'].astype(str).fillna('Unknown')
     
-    # Ajouter tranche d'âge
+    # Ajouter une colonne tranche d'âge
     df['age_group'] = pd.cut(df['age'], 
                              bins=[0, 12, 18, 35, 60, 100],
                              labels=['Enfant', 'Adolescent', 'Adulte', 'Adulte+', 'Senior'])
@@ -34,6 +21,9 @@ def load_titanic_data():
     return df
 
 def get_data_info(df):
+    """
+    Retourne les statistiques principales
+    """
     return {
         'total_passagers': len(df),
         'survie_rate': df['survived'].mean() * 100,
@@ -41,4 +31,3 @@ def get_data_info(df):
         'hommes': len(df[df['sex'] == 'male']),
         'femmes': len(df[df['sex'] == 'female'])
     }
-"@ | Out-File -FilePath data\loader.py -Encoding utf8
