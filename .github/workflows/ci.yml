@@ -63,24 +63,25 @@ jobs:
     
     - name: Generate HTML report
       run: |
-        python -c "
-import seaborn as sns
-import pandas as pd
-from ydata_profiling import ProfileReport
+        python - <<'EOF'
+        import seaborn as sns
+        import pandas as pd
+        from ydata_profiling import ProfileReport
 
-print('📊 Loading Titanic dataset...')
-df = sns.load_dataset('titanic')
+        print('📊 Loading Titanic dataset...')
+        df = sns.load_dataset('titanic')
 
-print('🧹 Cleaning data...')
-df['age'].fillna(df['age'].median(), inplace=True)
-df['embarked'].fillna(df['embarked'].mode()[0], inplace=True)
-df['deck'] = df['deck'].astype(str).fillna('Unknown')
+        print('🧹 Cleaning data...')
+        df['age'].fillna(df['age'].median(), inplace=True)
+        df['embarked'].fillna(df['embarked'].mode()[0], inplace=True)
+        df['deck'] = df['deck'].astype(str).fillna('Unknown')
 
-print('📝 Generating report...')
-profile = ProfileReport(df, title='Titanic Dataset Report', explorative=True)
-profile.to_file('titanic-report.html')
-print('✅ Report generated: titanic-report.html')
-"
+        print('📝 Generating report...')
+        profile = ProfileReport(df, title='Titanic Dataset Report', explorative=True)
+        profile.to_file('titanic-report.html')
+
+        print('✅ Report generated: titanic-report.html')
+        EOF
     
     - name: Upload report as artifact
       uses: actions/upload-artifact@v4
