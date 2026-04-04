@@ -40,7 +40,7 @@ jobs:
       run: |
         pytest tests/ -v --tb=short
 
-  # ============================================
+   # ============================================
   # JOB 2: Generate Report
   # ============================================
   generate-report:
@@ -83,11 +83,39 @@ jobs:
         print('✅ Report generated: titanic-report.html')
         EOF
     
-    - name: Upload report as artifact
+    - name: Upload report as artifact (GitHub)
       uses: actions/upload-artifact@v4
       with:
         name: titanic-report
         path: titanic-report.html
+    
+    - name: Upload report to Nexus
+      if: false
+      env:
+        NEXUS_USER: ${{ secrets.NEXUS_USERNAME }}
+        NEXUS_PASS: ${{ secrets.NEXUS_PASSWORD }}
+        NEXUS_URL: ${{ secrets.NEXUS_URL }}
+      run: |
+        echo "📤 Upload du rapport vers Nexus..."
+        
+        if [ -f "titanic-report.html" ]; then
+          echo "✅ Fichier trouvé: titanic-report.html"
+          ls -la titanic-report.html
+        else
+          echo "❌ Fichier non trouvé!"
+          exit 1
+        fi
+        
+        curl -v -u $NEXUS_USER:$NEXUS_PASS \
+          --upload-file titanic-report.html \
+          "$NEXUS_URL/repository/titanic-reports/titanic-report-v${{ github.run_number }}.html"
+        
+        if [ $? -eq 0 ]; then
+          echo "✅ Rapport uploadé avec succès vers Nexus"
+          echo "📍 URL: $NEXUS_URL/repository/titanic-reports/titanic-report-v${{ github.run_number }}.html"
+        else
+          echo "⚠️ Échec de l'upload vers Nexus"
+        fi
 
   # ============================================
   # JOB 3: Docker Build & Push to DockerHub
