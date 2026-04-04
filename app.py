@@ -358,92 +358,82 @@ if page == "🏠 Vue Générale":
     )
     st.plotly_chart(fig_age, use_container_width=True)
 
-# ============================================
-# PAGE 2 - ANALYSE DE SURVIE
-# ============================================
-elif page == "📈 Analyse de Survie":
-    st.markdown('<p class="section-title">📈 Analyse des facteurs de survie</p>', unsafe_allow_html=True)
+  # ============================================
+  # JOB 2: Generate Report & Upload to Nexus
+  # ============================================
+  generate-report:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
-    # Graphique 1: Survie par sexe (bar chart)
-    st.subheader("💀 Taux de survie par sexe")
-    survival_sex = filtered_df.groupby('sex')['survived'].mean() * 100
-    fig_sex = px.bar(
-        x=['👨 Hommes', '👩 Femmes'],
-        y=survival_sex.values,
-        text=[f"{v:.1f}%" for v in survival_sex.values],
-        color=['#ff6b6b', '#00d4ff'],
-        title="Taux de survie par sexe"
-    )
-    fig_sex.update_traces(textposition='outside')
-    fig_sex.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='white'),
-        yaxis_range=[0, 100]
-    )
-    st.plotly_chart(fig_sex, use_container_width=True)
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
     
-    # Graphique 2: Survie par classe (pie chart)
-    col1, col2 = st.columns(2)
+    - name: Setup Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
     
-    with col1:
-        st.subheader("🏆 Survie par classe")
-        survival_class = filtered_df.groupby('class')['survived'].mean() * 100
-        fig_class = px.pie(
-            values=survival_class.values,
-            names=survival_class.index,
-            title="Taux de survie par classe",
-            color_discrete_sequence=['#00d4ff', '#f9ca24', '#ff6b6b'],
-            hole=0.3
-        )
-        fig_class.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='white')
-        )
-        st.plotly_chart(fig_class, use_container_width=True)
+    - name: Install dependencies
+      run: |
+        pip install pandas seaborn ydata-profiling
     
-    with col2:
-        st.subheader("📊 Survie par tranche d'âge")
-        survival_age = filtered_df.groupby('age_group')['survived'].mean() * 100
-        fig_age = px.bar(
-            x=survival_age.index,
-            y=survival_age.values,
-            text=[f"{v:.1f}%" for v in survival_age.values],
-            color=survival_age.values,
-            color_continuous_scale='Greens',
-            title="Taux de survie par tranche d'âge"
-        )
-        fig_age.update_traces(textposition='outside')
-        fig_age.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='white'),
-            yaxis_range=[0, 100]
-        )
-        st.plotly_chart(fig_age, use_container_width=True)
+    - name: Generate HTML report
+      run: |
+        python -c "
+import seaborn as sns
+import pandas as pd
+from ydata_profiling import ProfileReport
+
+print('📊 Loading Titanic dataset...')
+df = sns.load_dataset('titanic')
+
+print('🧹 Cleaning data...')
+df['age'].fillna(df['age'].median(), inplace=True)
+df['embarked'].fillna(df['embarked'].mode()[0], inplace=True)
+df['deck'] = df['deck'].astype(str).fillna('Unknown')
+
+print('📝 Generating report...')
+profile = ProfileReport(df, title='Titanic Dataset Report', explorative=True)
+profile.to_file('titanic-report.html')
+
+print('✅ Report generated: titanic-report.html')
+"
     
-    # Heatmap Classe vs Sexe
-    st.subheader("📊 Heatmap : Classe vs Sexe")
-    pivot = filtered_df.pivot_table(
-        values='survived', 
-        index='class', 
-        columns='sex', 
-        aggfunc='mean'
-    ) * 100
-    fig_heat = px.imshow(
-        pivot,
-        text_auto='.1f',
-        title="Taux de survie (%) par Classe et Sexe",
-        color_continuous_scale='RdYlGn',
-        labels=dict(x="Sexe", y="Classe", color="Survie (%)")
-    )
-    fig_heat.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='white')
-    )
-    st.plotly_chart(fig_heat, use_container_width=True)
+    - name: Upload report as artifact (GitHub)
+      uses: actions/upload-artifact@v4
+      with:
+        name: titanic-report
+        path: titanic-report.html
+    
+    - name: Upload report to Nexus
+      if: false
+      env:
+        NEXUS_USER: ${{ secrets.NEXUS_USERNAME }}
+        NEXUS_PASS: ${{ secrets.NEXUS_PASSWORD }}
+        NEXUS_URL: ${{ secrets.NEXUS_URL }}
+      run: |
+        echo "📤 Upload du rapport vers Nexus..."
+        
+        if [ -f "titanic-report.html" ]; then
+          echo "✅ Fichier trouvé: titanic-report.html"
+          ls -la titanic-report.html
+        else
+          echo "❌ Fichier non trouvé!"
+          exit 1
+        fi
+        
+        curl -v -u $NEXUS_USER:$NEXUS_PASS \
+          --upload-file titanic-report.html \
+          "$NEXUS_URL/repository/titanic-reports/titanic-report-v${{ github.run_number }}.html"
+        
+        if [ $? -eq 0 ]; then
+          echo "✅ Rapport uploadé avec succès vers Nexus"
+          echo "📍 URL: $NEXUS_URL/repository/titanic-reports/titanic-report-v${{ github.run_number }}.html"
+        else
+          echo "⚠️ Échec de l'upload vers Nexus"
+        fi
 
 # ============================================
 # PAGE 3 - FILTRES INTERACTIFS
